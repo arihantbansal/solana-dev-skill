@@ -46,7 +46,11 @@ skill/
 ├── security.md                 # Security vulnerabilities & prevention
 ├── resources.md                # Curated reference links
 ├── compatibility-matrix.md     # Version compatibility tables (Anchor/Solana/Rust/GLIBC)
-└── common-errors.md            # Error message → solution mappings
+├── common-errors.md            # Error message → solution mappings
+├── surfpool.md                 # Surfpool local network guide
+├── surfpool-cheatcodes.md      # Surfpool cheatcodes reference
+├── surfpool-scenarios.md       # Surfpool testing scenarios
+└── confidential-transfers.md   # Confidential transfers (Token-2022 ZK)
 ```
 
 ## Usage
@@ -60,6 +64,7 @@ Once installed, Claude Code will automatically use this skill when you ask about
 - Client SDK generation (typed program clients)
 - Local testing (LiteSVM, Mollusk, Surfpool)
 - Security hardening and audit-style reviews
+- Surfpool local network setup and cheatcodes
 - **Toolchain issues** (version mismatches, GLIBC errors, dependency conflicts)
 - **Migration** between Anchor/Solana CLI versions
 
@@ -75,6 +80,7 @@ Once installed, Claude Code will automatically use this skill when you ask about
 "I'm getting GLIBC_2.39 not found when running anchor"
 "Help me upgrade from Anchor 0.30 to 0.31"
 "What versions of Solana CLI work with Anchor 0.31?"
+"Run Surfpool and create an account with 100 SOL and USDC"
 ```
 
 ## Stack Decisions
