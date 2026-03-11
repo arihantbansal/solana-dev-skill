@@ -76,7 +76,9 @@ When you implement changes, provide:
 - a short "risk notes" section for anything touching signing/fees/CPIs/token transfers
 
 ## Progressive disclosure (read when needed)
-- Solana Kit (@solana/kit) and Kit-compatible Clients: [kit/kit.md](kit/kit.md) — transactions, accounts, codecs, RPC, signers, program clients
+- Solana Kit (@solana/kit): [kit/kit.md](kit/kit.md) — plugin clients, quick start, common patterns
+- Kit Plugins & Composition: [kit/plugins.md](kit/plugins.md) — ready-to-use clients, custom client composition, available plugins
+- Kit Advanced: [kit/advanced.md](kit/advanced.md) — manual transactions, direct RPC, building plugins, domain-specific clients
 - UI + wallet + hooks: [frontend-framework-kit.md](frontend-framework-kit.md)
 - Kit ↔ web3.js boundary: [kit-web3-interop.md](kit-web3-interop.md)
 - Anchor programs: [programs-anchor.md](programs-anchor.md)

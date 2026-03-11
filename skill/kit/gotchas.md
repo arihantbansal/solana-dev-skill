@@ -1,11 +1,47 @@
 ---
 title: Common Gotchas
-description: Common type errors and runtime pitfalls with @solana/kit and their fixes, including signer types, lifetime assertions, and blockhash expiry.
+description: Common type errors and runtime pitfalls with @solana/kit and their fixes, including signer types, lifetime assertions, plugin ordering, and account existence.
 ---
 
 # Solana Kit Gotchas
 
 Common type errors and runtime pitfalls with their fixes.
+
+## Plugin Client Gotchas
+
+### Plugin Ordering — Type Error
+
+**Cause:** Plugins installed before their dependencies.
+
+```ts
+// ❌ Type error — planner requires rpc
+createEmptyClient()
+  .use(rpcTransactionPlanner())
+  .use(rpc(url));
+
+// ✅ Fix: Install dependencies first
+createEmptyClient()
+  .use(rpc(url))
+  .use(payer(signer))
+  .use(rpcTransactionPlanner())
+  .use(planAndSendTransactions());
+```
+
+### Forgetting to `await` Async Client
+
+**Cause:** Some plugins (e.g., `payerFromFile`, `generatedPayer`, `createLocalClient`) are async.
+
+```ts
+// ❌ Runtime error — client is a Promise, not a client
+const client = createLocalClient();
+client.sendTransaction([ix]); // TypeError: not a function
+
+// ✅ Fix: await the client
+const client = await createLocalClient();
+await client.sendTransaction([ix]);
+```
+
+---
 
 ## Type Errors
 
@@ -14,42 +50,31 @@ Common type errors and runtime pitfalls with their fixes.
 **Cause:** Using old type name from legacy web3.js.
 
 ```ts
-// ❌ Type error - IInstruction doesn't exist
+// ❌ Type error
 import { IInstruction } from '@solana/kit';
 
 // ✅ Fix: Use Instruction
-import { Instruction } from '@solana/instructions';
-// or from kit:
 import type { Instruction } from '@solana/kit';
 ```
 
 ### "Transaction message must be signed"
 
-**Cause:** Trying to send unsigned message.
+**Cause:** Trying to send unsigned message (manual pipeline only).
 
 ```ts
-// ❌ Type error
-sendTransaction(message);
-
 // ✅ Fix: Assert fully signed
 import { assertTransactionMessageIsFullySigned } from '@solana/transaction-messages';
 assertTransactionMessageIsFullySigned(message);
-sendTransaction(message);
 ```
 
 ### "Missing blockhash lifetime"
 
-**Cause:** Message missing lifetime before signing/sending.
+**Cause:** Message missing lifetime before signing/sending (manual pipeline only).
 
 ```ts
-// ❌ Type error
-signAndSendTransactionMessageWithSigners(message);
-
 // ✅ Fix: Assert lifetime exists
 import { assertTransactionMessageHasBlockhashLifetime } from '@solana/transaction-messages';
 assertTransactionMessageHasBlockhashLifetime(message);
-// or set it:
-setTransactionMessageLifetimeUsingBlockhash(blockhash, message);
 ```
 
 ### `signAndSendTransactionMessageWithSigners` type error
@@ -57,13 +82,11 @@ setTransactionMessageLifetimeUsingBlockhash(blockhash, message);
 **Cause:** Fee payer set as address, not signer.
 
 ```ts
-// ❌ Type error - fee payer is address
+// ❌ Type error — fee payer is address only
 setTransactionMessageFeePayer(address, message);
-signAndSendTransactionMessageWithSigners(message);
 
 // ✅ Fix: Use signer version
 setTransactionMessageFeePayerSigner(signer, message);
-signAndSendTransactionMessageWithSigners(message);
 ```
 
 ### Wrong signer type for wallet
@@ -75,36 +98,21 @@ signAndSendTransactionMessageWithSigners(message);
 type TransactionSendingSigner = {
   signAndSendTransactions(txs): Promise<SignatureBytes[]>;
 };
-
-// Use signAndSendTransactionMessageWithSigners for sending signers
 ```
 
 ### Missing Lifetime Type Assertion
 
-**Cause:** `sendAndConfirm` requires typed lifetime assertion.
+**Cause:** `sendAndConfirm` requires typed lifetime assertion (manual pipeline only).
 
 ```ts
 // ❌ Type error: Property '"__transactionWithBlockhashLifetime"' is missing
 const signed = await signTransactionMessageWithSigners(message);
 await sendAndConfirm(signed, { commitment: 'confirmed' });
 
-// ✅ Fix: Assert lifetime type
-import { assertIsTransactionWithBlockhashLifetime } from '@solana/kit';
-const signed = await signTransactionMessageWithSigners(message);
+// ✅ Fix: Assert lifetime + size types
 assertIsTransactionWithBlockhashLifetime(signed);
-await sendAndConfirm(signed, { commitment: 'confirmed' });
-
-// For durable nonce:
-import {
-  assertIsFullySignedTransaction,
-  assertIsTransactionWithDurableNonceLifetime,
-  assertIsTransactionWithinSizeLimit,
-} from '@solana/kit';
-const signed = await signTransactionMessageWithSigners(message);
-assertIsFullySignedTransaction(signed);
-assertIsTransactionWithDurableNonceLifetime(signed);
 assertIsTransactionWithinSizeLimit(signed);
-await sendAndConfirmDurableNonce(signed, { commitment: 'confirmed' });
+await sendAndConfirm(signed, { commitment: 'confirmed' });
 ```
 
 ### Missing `TransactionWithinSizeLimit`
@@ -112,35 +120,23 @@ await sendAndConfirmDurableNonce(signed, { commitment: 'confirmed' });
 **Cause:** Recent Kit versions require size assertion for send factories.
 
 ```ts
-// ❌ Type error: missing TransactionWithinSizeLimit
-const signed = await signTransactionMessageWithSigners(message);
-await sendAndConfirm(signed, { commitment: 'confirmed' });
-
 // ✅ Fix: Add size assertion
 import { assertIsTransactionWithinSizeLimit } from '@solana/kit';
-const signed = await signTransactionMessageWithSigners(message);
-assertIsTransactionWithBlockhashLifetime(signed);
 assertIsTransactionWithinSizeLimit(signed);
-await sendAndConfirm(signed, { commitment: 'confirmed' });
 ```
-
----
 
 ### RPC URL String vs Cluster Wrapper
 
 **Cause:** Using `devnet()`/`mainnet()` wrappers when raw URL string expected.
 
 ```ts
-// ❌ May cause issues if mismatched or unsupported
+// ❌ May cause issues
 import { devnet } from '@solana/rpc-types';
 const rpc = createSolanaRpc(devnet('https://my-custom-endpoint.com'));
 
 // ✅ Simple: use raw URL strings directly
 const rpc = createSolanaRpc('https://api.devnet.solana.com');
-const rpc = createSolanaRpc('http://127.0.0.1:8899'); // localnet
 ```
-
-The cluster wrappers are optional. For localnet testing and custom endpoints, prefer raw URL strings.
 
 ---
 
@@ -163,12 +159,12 @@ const decoded = decodeAccount(account, decoder);
 
 ### Blockhash expired after CU estimation
 
-**Cause:** Simulation takes time, blockhash ages out.
+**Cause:** Simulation takes time, blockhash ages out. Only applies to manual pipeline — plugin clients handle this automatically.
 
 ```ts
 // ❌ Blockhash may expire
 let message = pipe(...blockhash...);
-message = await estimateAndUpdateCU(message);  // Takes time
+message = await estimateAndUpdateCU(message);
 await signAndSendTransactionMessageWithSigners(message);
 
 // ✅ Fix: Refresh blockhash AFTER estimation
@@ -184,10 +180,9 @@ await signAndSendTransactionMessageWithSigners(message);
 **Cause:** Account doesn't exist yet (e.g., PDA not initialized).
 
 ```ts
-// Check if account exists before assuming it does
 const account = await fetchEncodedAccount(rpc, address);
 if (!account.exists) {
-  // Handle missing account - may need to create it first
+  // Handle missing account — may need to create it first
 }
 ```
 
@@ -197,16 +192,17 @@ if (!account.exists) {
 
 | Gotcha | Fix |
 |--------|-----|
-| `IInstruction` doesn't exist | Use `Instruction` from `@solana/instructions` |
+| Plugin ordering type error | Install dependencies before dependents |
+| Forgot to `await` async client | `const client = await createLocalClient()` |
+| `IInstruction` doesn't exist | Use `Instruction` from `@solana/kit` |
 | "Transaction message must be signed" | `assertTransactionMessageIsFullySigned(msg)` |
 | "Missing blockhash lifetime" | `assertTransactionMessageHasBlockhashLifetime(msg)` |
 | Blockhash expired after CU estimation | Refresh blockhash AFTER `estimateAndUpdateCU()` |
 | `signAndSendTransactionMessageWithSigners` type error | Use `setTransactionMessageFeePayerSigner` (not address) |
 | Account doesn't exist runtime error | `assertAccountExists(account)` before decode |
 | Wrong signer type for wallet | Use `TransactionSendingSigner` for wallets |
-| Simulation "account not found" | Check `account.exists` before operations |
 | Missing lifetime type on send | `assertIsTransactionWithBlockhashLifetime(signed)` |
 | Missing size type on send | `assertIsTransactionWithinSizeLimit(signed)` |
 | Durable nonce send type error | `assertIsTransactionWithDurableNonceLifetime(signed)` |
-| `lifetimeConstraint` lost after deserialize | Re-attach `lifetimeConstraint` metadata manually after deserialization |
+| `lifetimeConstraint` lost after deserialize | Re-attach `lifetimeConstraint` metadata manually |
 | RPC URL wrapper issues | Use raw URL strings instead of `devnet()`/`mainnet()` |
